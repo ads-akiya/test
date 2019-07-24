@@ -1,0 +1,230 @@
+
+ODAユーティリティ 動作検証手順メモ
+
+検証項目
+
+Ａ．マウントポイント指定での検証
+・Dockerコンテナ内 から ODAのマウントポイントパスを指定して、直接ODAユーティリティのボリュームラベル設定を実行
+・成功した場合は、Goプログラムから実行
+
+Ｂ．デバイスファイル指定での検証
+・Dockerコンテナ内 から ODAのデバイスファイルパスを指定して、直接ODAユーティリティのボリュームラベル設定を実行
+・成功した場合は、Goプログラムから実行
+
+
+検証項目手順詳細
+
+■事前動作確認：
+・ホスト側でODAユーティリティを起動してラベルを設定（事前動作確認）
+  ※カートリッジをODAに挿入してマウント確認後
+  #oda-util media label /dev/sd? "Data Archive System Test01" // そもそものツールでの動作確認
+  #oda-util media label /dev/sd? "Data Archive System Test02" // 書き換え可能かを見るのに２度行う
+  #oda-util media label /mnt/oda "Data Archive System Test03" // →この結果が失敗であれば、検証項目Ａは実施しない
+
+■事前準備：
+・Docker をインストール（手順： Docker_CE_install.txt）
+・ContOS 7のイメージ取得（※oda-utilのサポートバージョンが7.5なのでこれを指定すること）
+  #docker pull centos:centos7.5.1804
+
+
+============================================================================
+Ａ．マウントポイント指定での検証
+a-1) コンテナの作成・起動（マウントポイントパス指定）
+※シェル上で引き続き作業をするので、デタッチド (-d)指定はしない。
+#docker run -it --name centos7_1 -v "/mnt/oda:/mnt/oda" centos:centos7  /bin/bash
+
+a-2) カートリッジをODAに挿入してマウント確認
+※ホスト側とコンテナ側で確認
+
+a-3) コンテナ内のシェルからODAユーティリティをインストール
+※資料編参照
+
+a-4) コンテナ内のシェルからODAユーティリティを起動してラベルを設定
+#oda-util media label /mnt/oda "Data Archive System Test04"
+	→ここでNGならば、以降はデバイスパスのみで行う。
+
+a-5) ODAディスクラベル名の確認
+"oda-util media info [OPTIONS] DEVICE_PATH"コマンドで確認可能か？
+
+コンテナ側で確認
+#oda-util media info /mnt/oda
+
+ホスト側で確認
+#oda-util media info /mnt/oda
+#oda-util media info /dev/sd?
+
+◆失敗した場合→Ｂへ
+◆成功した場合→下記へ
+
+
+a-7) コンテナ内にGoプログラムのダウンロード
+#curl -O https://raw.githubusercontent.com/ads-nishioka/temp/master/exec_command
+
+a-8) コンテナ内のGoプログラムからODAユーティリティを起動してラベルを設定
+#exec_command oda-util media label /mnt/oda "Data Archive System Test05"
+
+◆失敗した場合→Ｂへ
+◆成功した場合→終了
+
+
+■参考：Goプログラムのリビルドが必要な場合
+x-1) コンテナ内にGoをインストール
+#curl -O https://dl.google.com/go/go1.12.6.linux-amd64.tar.gz
+#tar -zxvf go1.12.6.linux-amd64.tar.gz
+
+x-2) Goプログラムのソースコードのダウンロード
+#curl -O https://raw.githubusercontent.com/ads-nishioka/temp/master/exec_command.go
+
+
+============================================================================
+Ｂ．デバイスファイル指定での検証
+
+b-0) 検証Ａで行ったコンテナの停止と削除
+#docker stop centos7_1
+#docket rm centos7_1
+
+b-1) コンテナの作成・起動（デバイスファイル指定）
+※シェル上で引き続き作業をするので、デタッチド (-d)指定はしない。
+#docker run -it --name centos7_2 -v "/dev/sd?:/mnt/oda" centos:centos7 /bin/bash
+
+b-2) カートリッジをODAに挿入してマウント確認
+※ホスト側とコンテナ側で確認
+
+b-3) コンテナ内のシェルからODAユーティリティをインストール
+※資料編参照
+
+b-4) コンテナ内のシェルからODAユーティリティを起動してラベルを設定
+#oda-util media label /mnt/oda "Data Archive System Test06"
+
+b-5) ODAディスクラベル名の確認
+"oda-util media info [OPTIONS] DEVICE_PATH"コマンドで確認可能か？
+
+コンテナ側で確認
+#oda-util media info /mnt/oda
+
+ホスト側で確認
+#oda-util media info /mnt/oda
+#oda-util media info /dev/sd?
+
+◆失敗した場合→Ｃへ
+◆成功した場合→下記へ
+
+a-7) コンテナ内にGoプログラムのダウンロード
+#curl -O https://raw.githubusercontent.com/ads-nishioka/temp/master/exec_command
+
+a-8) コンテナ内のGoプログラムからODAユーティリティを起動してラベルを設定
+#exec_command oda-util media label /mnt/oda "Data Archive System Test07"
+
+◆失敗した場合→Ｃへ
+◆成功した場合→終了
+
+
+============================================================================
+Ｃ．コンテナ内からホスト側へ通信を行いODAユーティリティ操作
+
+ホスト側で待受けプログラムを常駐させて、Dockerコンテナ内から要求を受け付ける方式とする。
+
+
+============================================================================
+Ｄ．コンテナ内でODAをボリューム設定しているときにアンマウント検証：別検証項目
+
+コンテナ側で確認
+#umount /mnt/oda
+
+ホスト側で確認
+#umount /mnt/oda
+
+
+============================================================================
+資料
+
+----------------------------------------------------------------------------
+■ ODAユーティリティのインストール方法
+
+# ダウンロード
+curl -O http://dspcdn.sonycreativesoftware.com/partners/OpticalDiscArchiveSoftware/ODASoftware_4_4_0_linux.zip
+
+# wget の場合
+# wget https://www.sonycreativesoftware.com/jp/download/link?id=11100.0  -O ODASoftware_4_4_0_linux.zip
+
+# unzip がなければ、
+# yum install -y unzip
+
+unzip ODASoftware_4_4_0_linux.zip
+
+# 依存関係インストール（which はインストール時の警告が出ないようにするため。必須ではない。）
+yum install -y which lsof fuse-libs apr apr-util
+
+./ODASoftware_V440.bin
+
+oda-util --version
+
+
+----------------------------------------------------------------------------
+■ ODAユーティリティ使用のラベル設定方法
+
+Usage: oda-util media label [OPTIONS] DEVICE_PATH LABEL_NAME
+
+Set the volume label to the media.
+
+Options:
+  -h [ --help ]         Print help information on the standard output.
+
+
+----------------------------------------------------------------------------
+■ ODAユーティリティ使用の情報表示方法
+
+Usage: oda-util media info [OPTIONS] DEVICE_PATH
+
+Show media information.
+
+Options:
+  -h [ --help ]         Print help information on the standard output.
+
+
+----------------------------------------------------------------------------
+■ Goインストール後の動作確認
+#go run hello.goを実行
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+package main
+
+import "fmt"
+
+func main() {
+    fmt.Printf("hello, world\n")
+}
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+----------------------------------------------------------------------------
+■ Dockerのコンテナ操作
+
+コンテナ起動のシェルから一時的に抜ける
+「Ctrl + p, q」
+
+コンテナで起動しているプロセスの標準入出力(STDIN/STDOUT)に接続(attach)する。※最初にシェルを起動している場合
+#docker attach centos7_1
+
+コンテナ起動のシェルを終了する。
+#exit
+
+
+----------------------------------------------------------------------------
+■ USBデバイス確認方法
+以下のコマンドのいずれかで確認
+dmesg
+journalctgl -k
+上の二つはDockerからは使用不可
+
+mount
+df -Th
+
+
+----------------------------------------------------------------------------
+■ ODAドライブマウント／アンマウント方法
+カートリッジを挿入すれば自動マウントなので、mount発行は要らない（はず）
+
+# mount -t odaudf /dev/sd? /mnt/oda
+# umount /mnt/oda
+
